@@ -908,6 +908,8 @@ func resourceContainerCluster() *schema.Resource {
 						"identity_namespace": {
 							Type:     schema.TypeString,
 							Required: true,
+							// The GCP API allows this to be mutated in-place, but that has no effect.
+							ForceNew: true,
 						},
 					},
 				},
