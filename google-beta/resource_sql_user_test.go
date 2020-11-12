@@ -34,6 +34,7 @@ func TestAccSqlUser_mysql(t *testing.T) {
 					testAccCheckGoogleSqlUserExists(t, "google_sql_user.user2"),
 				),
 			},
+
 			{
 				ResourceName:            "google_sql_user.user2",
 				ImportStateId:           fmt.Sprintf("%s/%s/gmail.com/admin", getTestProjectFromEnv(), instance),
@@ -72,7 +73,42 @@ func TestAccSqlUser_postgres(t *testing.T) {
 				ImportStateId:           fmt.Sprintf("%s/%s/admin", getTestProjectFromEnv(), instance),
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"password"},
+				ImportStateVerifyIgnore: []string{"password", "secret"},
+			},
+		},
+	})
+}
+
+func TestAccSqlUserPasswordInSecretManager_mysql(t *testing.T) {
+	// Multiple fine-grained resources
+	skipIfVcr(t)
+	t.Parallel()
+
+	instance := fmt.Sprintf("i-%d", randInt(t))
+	vcrTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccSqlUserDestroyProducer(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testGoogleSqlUserPasswordInSecretManager_mysql(instance, "pAssw0rd"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckGoogleSqlUserExists(t, "google_sql_user.user1"),
+				),
+			},
+			{
+				// Update password
+				Config: testGoogleSqlUser_mysql(instance, "new_pAssw0rd"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckGoogleSqlUserExists(t, "google_sql_user.user1"),
+				),
+			},
+			{
+				ResourceName:            "google_sql_user.user2",
+				ImportStateId:           fmt.Sprintf("%s/%s/gmail.com/admin", getTestProjectFromEnv(), instance),
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"password", "secret"},
 			},
 		},
 	})
@@ -179,4 +215,36 @@ resource "google_sql_user" "user" {
   password = "%s"
 }
 `, instance, password)
+}
+
+func testGoogleSqlUserPasswordInSecretManager_mysql(instance, password string) string {
+	return fmt.Sprintf(`
+resource "google_sql_database_instance" "instance" {
+  name   = "%s"
+  region = "us-central1"
+  settings {
+    tier = "db-f1-micro"
+  }
+}
+
+resource "google_sql_user" "user1" {
+  name     = "admin"
+  instance = google_sql_database_instance.instance.name
+  host     = "google.com"
+  secret   = google_secret_manager_secret_version.mysql-root-password.id
+}
+
+resource "google_secret_manager_secret" "mysql-root-password" {
+  secret_id = "mysql-root-password-%s"
+
+  replication {
+	automatic = true
+  }
+}
+resource "google_secret_manager_secret_version" "mysql-root-password" {
+  secret = google_secret_manager_secret.mysql-root-password.id
+
+  secret_data = "%s"
+}
+`, instance, instance, password)
 }

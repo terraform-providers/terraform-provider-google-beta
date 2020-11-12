@@ -1,8 +1,10 @@
 package google
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,6 +60,12 @@ func resourceSqlUser() *schema.Resource {
 				Description: `The password for the user. Can be updated. For Postgres instances this is a Required field.`,
 			},
 
+			"secret": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: `The version of the secret manager secret containing the password for this user. password and secret are mutual exclusive`,
+			},
+
 			"project": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -67,6 +75,60 @@ func resourceSqlUser() *schema.Resource {
 			},
 		},
 	}
+}
+
+func getPassword(d *schema.ResourceData, meta interface{}) (string, error) {
+	config := meta.(*Config)
+
+	password := d.Get("password").(string)
+	secret := d.Get("secret").(string)
+	if password != "" && secret != "" {
+		return "", fmt.Errorf("both the password and the secret containing the password are specified, pick one")
+	}
+
+	if password != "" {
+		return password, nil
+	}
+
+	url, err := replaceVars(d, config, "{{SecretManagerBasePath}}{{secret}}")
+	if err != nil {
+		return "", err
+	}
+
+	fv, err := parseProjectFieldValue("secrets", secret, "project", d, config, false)
+	if err != nil {
+		return "", err
+	}
+	project := fv.Project
+
+	var version map[string]interface{}
+	version, err = sendRequest(config, "GET", project, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Error retrieving available secret manager secret versions: %s", err.Error())
+	}
+
+	secretVersionRegex := regexp.MustCompile("projects/(.+)/secrets/(.+)/versions/(.+)$")
+
+	parts := secretVersionRegex.FindStringSubmatch(version["name"].(string))
+	// should return [full string, project number, secret name, version number]
+	if len(parts) != 4 {
+		panic(fmt.Sprintf("secret name, %s, does not match format, projects/{{project}}/secrets/{{secret}}/versions/{{version}}", version["name"].(string)))
+	}
+
+	log.Printf("[DEBUG] Received Google SecretManager Version: %q", version)
+
+	url = fmt.Sprintf("%s:access", url)
+	resp, err := sendRequest(config, "GET", project, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Error retrieving available secret manager secret version access: %s", err.Error())
+	}
+
+	data := resp["payload"].(map[string]interface{})
+	secretData, err := base64.StdEncoding.DecodeString(data["data"].(string))
+	if err != nil {
+		return "", fmt.Errorf("Error decoding secret manager secret version data: %s", err.Error())
+	}
+	return string(secretData), nil
 }
 
 func resourceSqlUserCreate(d *schema.ResourceData, meta interface{}) error {
@@ -83,8 +145,11 @@ func resourceSqlUserCreate(d *schema.ResourceData, meta interface{}) error {
 
 	name := d.Get("name").(string)
 	instance := d.Get("instance").(string)
-	password := d.Get("password").(string)
 	host := d.Get("host").(string)
+	password, err := getPassword(d, config)
+	if err != nil {
+		return err
+	}
 
 	user := &sqladmin.User{
 		Name:     name,
@@ -198,8 +263,11 @@ func resourceSqlUserUpdate(d *schema.ResourceData, meta interface{}) error {
 
 		name := d.Get("name").(string)
 		instance := d.Get("instance").(string)
-		password := d.Get("password").(string)
 		host := d.Get("host").(string)
+		password, err := getPassword(d, config)
+		if err != nil {
+			return err
+		}
 
 		user := &sqladmin.User{
 			Name:     name,
