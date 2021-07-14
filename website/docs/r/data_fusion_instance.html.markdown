@@ -44,9 +44,9 @@ To get more information about Instance, see:
 ```hcl
 resource "google_data_fusion_instance" "basic_instance" {
   provider = google-beta
-  name = "my-instance"
-  region = "us-central1"
-  type = "BASIC"
+  name     = "my-instance"
+  region   = "us-central1"
+  type     = "BASIC"
 }
 ```
 <div class = "oics-button" style="float: right; margin: 0 0 -15px">
@@ -59,22 +59,23 @@ resource "google_data_fusion_instance" "basic_instance" {
 
 ```hcl
 resource "google_data_fusion_instance" "extended_instance" {
-  provider = google-beta
-  name = "my-instance"
-  description = "My Data Fusion instance"
-  region = "us-central1"
-  type = "BASIC"
-  enable_stackdriver_logging = true
+  provider                      = google-beta
+  name                          = "my-instance"
+  description                   = "My Data Fusion instance"
+  region                        = "us-central1"
+  type                          = "BASIC"
+  enable_stackdriver_logging    = true
   enable_stackdriver_monitoring = true
+  enable_rbac                   = true
   labels = {
     example_key = "example_value"
   }
   private_instance = true
   network_config {
-    network = "default"
+    network       = "default"
     ip_allocation = "10.89.48.0/22"
   }
-  version = "6.3.0"
+  version                  = "6.3.0"
   dataproc_service_account = data.google_app_engine_default_service_account.default.email
 }
 
@@ -122,6 +123,10 @@ The following arguments are supported:
   (Optional)
   Option to enable Stackdriver Monitoring.
 
+* `enable_rbac` -
+  (Optional)
+  Option to enable granular role-based access control.
+  
 * `labels` -
   (Optional)
   The resource labels for instance to use to annotate any related underlying resources,

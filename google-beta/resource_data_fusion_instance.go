@@ -61,7 +61,7 @@ of concurrent pipelines, no support for streaming pipelines, etc.
 - ENTERPRISE: Enterprise Data Fusion instance. In Enterprise type, the user will have more features
 available, such as support for streaming pipelines, higher number of concurrent pipelines, etc.
 - DEVELOPER: Developer Data Fusion instance. In Developer type, the user will have all features available but
-with restrictive capabilities. This is to help enterprises design and develop their data ingestion and integration 
+with restrictive capabilities. This is to help enterprises design and develop their data ingestion and integration
 pipelines at low cost. Possible values: ["BASIC", "ENTERPRISE", "DEVELOPER"]`,
 			},
 			"dataproc_service_account": {
@@ -86,6 +86,12 @@ pipelines at low cost. Possible values: ["BASIC", "ENTERPRISE", "DEVELOPER"]`,
 				Optional:    true,
 				Description: `Option to enable Stackdriver Monitoring.`,
 			},
+            "enable_rbac": {
+                Type:        schema.TypeBool,
+                Optional:    true,
+                ForceNew:    true,
+                Description: `Option to enable Granular Role Based Access Control.`,
+            },
 			"labels": {
 				Type:     schema.TypeMap,
 				Optional: true,
@@ -233,6 +239,12 @@ func resourceDataFusionInstanceCreate(d *schema.ResourceData, meta interface{}) 
 	} else if v, ok := d.GetOkExists("enable_stackdriver_monitoring"); !isEmptyValue(reflect.ValueOf(enableStackdriverMonitoringProp)) && (ok || !reflect.DeepEqual(v, enableStackdriverMonitoringProp)) {
 		obj["enableStackdriverMonitoring"] = enableStackdriverMonitoringProp
 	}
+    enableRbacProp, err := expandDataFusionInstanceEnableRbac(d.Get("enable_rbac"), d, config)
+    if err != nil {
+        return err
+    } else if v, ok := d.GetOkExists("enable_rbac"); !isEmptyValue(reflect.ValueOf(enableRbacProp)) && (ok || !reflect.DeepEqual(v, enableRbacProp)) {
+        obj["enableRbac"] = enableRbacProp
+    }
 	labelsProp, err := expandDataFusionInstanceLabels(d.Get("labels"), d, config)
 	if err != nil {
 		return err
@@ -383,6 +395,9 @@ func resourceDataFusionInstanceRead(d *schema.ResourceData, meta interface{}) er
 	if err := d.Set("enable_stackdriver_logging", flattenDataFusionInstanceEnableStackdriverLogging(res["enableStackdriverLogging"], d, config)); err != nil {
 		return fmt.Errorf("Error reading Instance: %s", err)
 	}
+	if err := d.Set("enable_rbac", flattenDataFusionInstanceEnableRbac(res["enable_rbac"], d, config)); err != nil {
+		return fmt.Errorf("Error reading Instance: %s", err)
+	}
 	if err := d.Set("enable_stackdriver_monitoring", flattenDataFusionInstanceEnableStackdriverMonitoring(res["enableStackdriverMonitoring"], d, config)); err != nil {
 		return fmt.Errorf("Error reading Instance: %s", err)
 	}
@@ -448,6 +463,12 @@ func resourceDataFusionInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 	} else if v, ok := d.GetOkExists("enable_stackdriver_logging"); !isEmptyValue(reflect.ValueOf(v)) && (ok || !reflect.DeepEqual(v, enableStackdriverLoggingProp)) {
 		obj["enableStackdriverLogging"] = enableStackdriverLoggingProp
 	}
+    enableRbacProp, err := expandDataFusionInstanceEnableRbac(d.Get("enable_rbac"), d, config)
+    if err != nil {
+        return err
+    } else if v, ok := d.GetOkExists("enable_rbac"); !isEmptyValue(reflect.ValueOf(v)) && (ok || !reflect.DeepEqual(v, enableRbacProp)) {
+        obj["enableRbac"] = enableRbacProp
+    }
 	enableStackdriverMonitoringProp, err := expandDataFusionInstanceEnableStackdriverMonitoring(d.Get("enable_stackdriver_monitoring"), d, config)
 	if err != nil {
 		return err
